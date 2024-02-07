@@ -24,14 +24,14 @@
         <el-container>
           <el-main>
             <el-row>
-              <el-col :offset="8" :span="6">
+              <el-col :offset="11" :span="2">
                 <div style="font-size: 25px;">Base Info</div>
               </el-col>
             </el-row>
             <br>
             <el-row>
               <el-col :offset="4" :span="3" style="font-size: 25px;">
-                receiver address
+                recipient address
               </el-col>
               <el-col :span="4">
                 <div style=" padding-top: 6px;">
@@ -50,7 +50,7 @@
             <br>
             <hr>
             <el-row>
-              <el-col :offset="8" :span="6">
+              <el-col :offset="9" :span="6">
                 <div style="font-size: 25px;">Payment Info</div><br>
                 <div>What do you want the recipient to pay?</div>
               </el-col>
@@ -77,23 +77,25 @@
             <br><br><br>
             <hr>
             <el-row>
-              <el-col :offset="8" :span="6">
+              <el-col :offset="9" :span="6">
                 <div style="font-size: 25px;">Send Annexs</div><br>
                 <div>what do you want to send?</div>
+                <div style="color: red;">Currently you still need to manually approve</div>
               </el-col>
             </el-row>
             <br><br>
             <el-row v-for="(item, index) in annexs" style="font-size: 20px;">
-              <el-col :span="4">
+              <el-col :span="5">
                 type
                 <el-radio-group v-model="item.type">
+                  <el-radio :label="0">ETH</el-radio>
                   <el-radio :label="1">ERC20</el-radio>
                   <el-radio :label="2">ERC721</el-radio>
                   <el-radio :label="3">ERC1155</el-radio>
                 </el-radio-group>
                 <!-- <el-divider direction="vertical" /> -->
               </el-col>
-              <el-col :span="7">
+              <el-col :span="7" v-if="item.type == 1 || item.type == 2 || item.type == 3">
                 address
                 <el-input type="input" placeholder="address" v-model="item.address" style="width: 320px;" />
               </el-col>
@@ -101,10 +103,10 @@
                 id
                 <el-input type="input" placeholder="id" v-model="item.id" style="width: 100px;" />
               </el-col>
-              <el-col :span="5" v-if="item.type == 1 || item.type == 3">
+              <el-col :span="5" v-if="item.type == 0 || item.type == 1 || item.type == 3">
                 amount
-                <el-input type="input" placeholder="amount(100.1)" v-if="item.type == 1" v-model="item.amount"
-                  style="width: 200px;" />
+                <el-input type="input" placeholder="amount(100.1)" v-if="item.type == 0 || item.type == 1"
+                  v-model="item.amount" style="width: 200px;" />
                 <el-input type="input" placeholder="amount(Only integers)" v-if="item.type == 3" v-model="item.amount"
                   style="width: 200px;" />
               </el-col>
@@ -122,13 +124,14 @@
             <hr>
             <br>
             <el-row>
-              <el-col :offset="9" :span="5">
+              <el-col :offset="11" :span="2">
                 <el-button type="success" @click="sendLetter()" v-if="!sending">Send</el-button>
                 <br>
                 <br>
                 <el-progress :percentage="70" :indeterminate="true" width="300" v-if="sending" />
               </el-col>
             </el-row>
+            <div style="font-size: 20px;">letterId: {{ letterId }}</div>
             <br><br><br><br><br>
           </el-main>
         </el-container>
@@ -203,6 +206,10 @@
 .el-progress__text {
   display: none;
 }
+
+.el-main {
+  padding: 0;
+}
 </style>
 
 <script>
@@ -212,10 +219,7 @@ import { ref } from 'vue'
 import BigNumber from "bignumber.js";
 import { erc20Abi, postOfficAbi } from './assets/config'
 
-const CONTRACT_ADDRESS = "0xca4C532B10b8E9d48A65239C7E9eAafBF170b3Ce"
-const coder = new ethers.AbiCoder
-
-const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const CONTRACT_ADDRESS = "0x27288E663371559F2582622D657A0Df8C21B4961"
 
 export default {
   name: 'App',
@@ -228,8 +232,6 @@ export default {
     return {
       activeName: ref('first'),
       sending: false,
-      provider: undefined,
-      signer: null,
       contract: null,
       network: null,
       address: null,
@@ -243,11 +245,11 @@ export default {
         {
           type: "",
           address: "",
-          amount: "0",
+          amount: "",
           id: "0"
         }
       ],
-      annexNum: 1,
+      letterId: "0xf6821c8e8ab7f5256121b20acd69c9e87cb5ce6ce0f36596237c05fd44f97638",
       queryPayment: {
         address: "0xca4C532B10b8E9d48A65239C7E9eAafBF170b3Ce",
         name: "usdt",
@@ -275,43 +277,59 @@ export default {
     },
     async sendLetter() {
       const annexsData = []
+      let e = BigNumber(0);
+      let provider = new ethers.BrowserProvider(window.ethereum)
       for (let i = 0; i < this.annexs.length; i++) {
-        const element = annexs[i];
+        const element = this.annexs[i];
         let amount = element.amount
-        if (element.type == 1) {
-          const erc20 = new Contract(element.address, erc20Abi, this.provider)
-          const decimals = erc20.decimals();
-          amount = BigNumber(amount).multipliedBy(BigInt(10) ** decimals).toFormat(0);
+        let address = element.address
+        let id = element.id;
+        if (element.type == 0) {
+          e = e.plus(BigNumber(amount).multipliedBy(10n ** 18n));
+          amount = BigNumber(amount).multipliedBy(10n ** 18n).toFixed(0);
+          address = ethers.ZeroAddress
+          id = 0;
         }
-        annexsData.push([element.type, element.address, amount, element.id])
+        if (element.type == 1) {
+          const erc20 = new Contract(element.address, erc20Abi, provider)
+          console.log(erc20);
+          const decimals = await erc20.decimals();
+          amount = BigNumber(amount).multipliedBy(10n ** decimals).toFixed(0);
+          id = 0;
+        }
+        if (element.type == 2) {
+          amount = 0
+        }
+        annexsData.push([element.type, address, amount, id])
       }
+      e = BigInt(e.toFixed(0));
+      const payToken = new Contract(this.payInfo.token, erc20Abi, provider)
+      const payTokenDecimals = await payToken.decimals();
+      const paymentInfo = [this.payInfo.token, BigNumber(this.payInfo.amount).multipliedBy(10n ** payTokenDecimals).toFixed(0)]
 
-      const payToken = new Contract(this.payInfo.token, erc20Abi, this.provider)
-      const payTokenDecimals = payToken.decimals();
-      const paymentInfo = [this.payInfo.token, BigNumber(this.payInfo.amount).multipliedBy(BigInt(10) ** payTokenDecimals).toFormat(0)]
+      const postOffice = new Contract(CONTRACT_ADDRESS, postOfficAbi, provider)
 
-      const postOffice = new Contract(CONTRACT_ADDRESS, postOfficAbi, this.provider)
+      console.log(annexsData);
 
       this.sending = true;
 
-      const tx = await postOffice.connect(this.signer).sendLetter(annexsData, paymentInfo, this.receiver, this.deadline);
+      let signer = await provider.getSigner()
+      const tx = await postOffice.connect(signer).sendLetter(annexsData, paymentInfo, this.receiver, this.deadline, { value: e });
       const returnData = await tx.wait()
-      const id = returnData.logs[returnData.logs.length - 1].args
+      const id = returnData.logs[returnData.logs.length - 1].args[0]
       this.sending = false;
-      console.log(id);
+      this.letterId = id;
     },
     async connectWallet() {
       if (window.ethereum == null) {
         ElMessage.error('Please install metamask')
       } else {
         try {
-          let provider0 = new ethers.BrowserProvider(window.ethereum)
-          let signer0 = await provider0.getSigner();
-          this.address = signer0.address.substring(0, 8) + "..."
-          this.network = (await provider0.getNetwork()).name
+          let provider = new ethers.BrowserProvider(window.ethereum)
+          let signer = await provider.getSigner();
+          this.address = signer.address.substring(0, 8) + "..."
+          this.network = (await provider.getNetwork()).name
 
-          this.provider = provider0;
-          this.signer = signer0;
         } catch (error) {
           if (error.info.error.code === 4001) {
             ElMessage({
@@ -325,30 +343,22 @@ export default {
     async accountsChanged(accounts) {
       console.log(accounts);
       if (accounts.length > 0) {
-        let provider0 = new ethers.BrowserProvider(window.ethereum)
-        let signer0 = await provider0.getSigner();
-        this.address = signer0.address.substring(0, 8) + "..."
-        this.signer = signer0
+        let provider = new ethers.BrowserProvider(window.ethereum)
+        let signer = await provider.getSigner();
+        this.address = signer.address.substring(0, 8) + "..."
       } else {
         this.network = null;
-        this.provider = undefined;
-        this.signer = null
         this.address = null
       }
     },
     async chainChanged(networkId) {
       console.log(networkId);
-      let provider0 = new ethers.BrowserProvider(window.ethereum)
-      let signer0 = await provider0.getSigner();
-      this.network = (await provider0.getNetwork()).name
+      let provider = new ethers.BrowserProvider(window.ethereum)
+      this.network = (await provider.getNetwork()).name
 
-      this.provider = provider0;
-      this.signer = signer0;
     },
     disconnect() {
       this.network = null;
-      this.provider = undefined;
-      this.signer = null
       this.address = null
     },
     deleteAnnex(index) {
