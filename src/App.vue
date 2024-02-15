@@ -2,7 +2,7 @@
   <div style="width: 1600px;">
     <el-container>
       <el-header>
-        <el-alert title="Only supports sepolia and blast" type="info" center show-icon />
+        <el-alert title="Only supports sepolia and blast sepolia" type="info" center show-icon />
         <el-row>
           <el-col :offset="9" :span="6" style="font-size: 30px;">
             Blockchain Post Office
@@ -251,8 +251,8 @@ import { erc20Abi, postOfficAbi } from './assets/config'
 const coder = AbiCoder.defaultAbiCoder();
 
 const CONTRACT_ADDRESS = {
-  "sepolia": "0xA345df28B272E617c0179912dB98c767a1A03406",
-
+  "11155111": "0xA345df28B272E617c0179912dB98c767a1A03406",
+  "168587773": "0xabba4D35cCb5da1A0daaaF171C0480A25d802eD7"
 }
 
 export default {
@@ -268,6 +268,7 @@ export default {
       sending: false,
       contract: null,
       network: null,
+      chainId: null,
       address: null,
       receiver: null,
       deadline: null,
@@ -305,7 +306,7 @@ export default {
     async claim() {
       let provider = new ethers.BrowserProvider(window.ethereum)
       let signer = await provider.getSigner()
-      const postOffice = new Contract(CONTRACT_ADDRESS[this.network], postOfficAbi, provider)
+      const postOffice = new Contract(CONTRACT_ADDRESS[this.chainId], postOfficAbi, provider)
       if (this.queryId == null || this.queryId == undefined || this.queryId == '') {
         ElMessage({ message: "letterId is empty", type: 'warning', });
         return;
@@ -314,7 +315,7 @@ export default {
     },
     async getLetter() {
       let provider = new ethers.BrowserProvider(window.ethereum)
-      const postOffice = new Contract(CONTRACT_ADDRESS[this.network], postOfficAbi, provider)
+      const postOffice = new Contract(CONTRACT_ADDRESS[this.chainId], postOfficAbi, provider)
       const letter = await postOffice.letters(this.queryId);
       if (letter[0] === ethers.ZeroAddress) {
         ElMessage({ message: "There is no such letter", type: 'warning', });
@@ -412,7 +413,7 @@ export default {
       const payTokenDecimals = await payToken.decimals();
       const paymentInfo = [this.payInfo.token, BigNumber(this.payInfo.amount).multipliedBy(10n ** payTokenDecimals).toFixed(0)]
 
-      const postOffice = new Contract(CONTRACT_ADDRESS[this.network], postOfficAbi, provider)
+      const postOffice = new Contract(CONTRACT_ADDRESS[this.chainId], postOfficAbi, provider)
 
       this.sending = true;
 
@@ -436,7 +437,10 @@ export default {
           let provider = new ethers.BrowserProvider(window.ethereum)
           let signer = await provider.getSigner();
           this.address = signer.address.substring(0, 8) + "..."
-          this.network = (await provider.getNetwork()).name
+          const network = await provider.getNetwork()
+          this.chainId = network.chainId;
+          this.network = network.name
+          if (this.chainId == 168587773n) this.network = "blast sepolia"
 
         } catch (error) {
           if (error.info.error.code === 4001) {
