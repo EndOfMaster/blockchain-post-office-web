@@ -2,6 +2,7 @@
   <div style="width: 1600px;">
     <el-container>
       <el-header>
+        <el-alert title="Only supports sepolia and blast" type="info" center show-icon />
         <el-row>
           <el-col :offset="9" :span="6" style="font-size: 30px;">
             Blockchain Post Office
@@ -16,6 +17,7 @@
         </el-row>
       </el-header>
     </el-container>
+    <br>
     <el-divider>
       <el-icon><star-filled /></el-icon>
     </el-divider>
@@ -70,7 +72,7 @@
               </el-col>
               <el-col :span="4">
                 <div style=" padding-top: 6px;">
-                  <el-input v-model="payInfo.amount" placeholder="token amount" />
+                  <el-input v-model="payInfo.amount" placeholder="like 1.132" />
                 </div>
               </el-col>
             </el-row>
@@ -105,9 +107,9 @@
               </el-col>
               <el-col :span="5" v-if="item.type == 0 || item.type == 1 || item.type == 3">
                 amount
-                <el-input type="input" placeholder="amount(100.1)" v-if="item.type == 0 || item.type == 1"
+                <el-input type="input" placeholder="like 1.123" v-if="item.type == 0 || item.type == 1"
                   v-model="item.amount" style="width: 200px;" />
-                <el-input type="input" placeholder="amount(Only integers)" v-if="item.type == 3" v-model="item.amount"
+                <el-input type="input" placeholder="Only integers" v-if="item.type == 3" v-model="item.amount"
                   style="width: 200px;" />
               </el-col>
               <el-col :span="1" v-if="index > 0">
@@ -141,30 +143,58 @@
           <el-main>
             <el-row>
               <el-col :offset="8" :span="6">
-                <el-input v-model="queryId" placeholder="id" style="width: 300px;" />&nbsp;
-                <el-button type="primary">Query</el-button>
+                <el-input v-model="queryId" placeholder="letter id" style="width: 300px;" />&nbsp;
+                <el-button type="primary" @click="getLetter()">Query</el-button>
               </el-col>
             </el-row>
             <br>
             <hr>
             <el-row>
-              <el-col :offset="8" :span="6">
+              <el-col :offset="11" :span="2">
+                <div style="font-size: 25px;">Base Info</div>
+              </el-col>
+            </el-row>
+            <br>
+            <el-row style="font-size: 15px;">
+              <el-col :offset="2" :span="2">
+                Recipient address
+              </el-col>
+              <el-col :span="5">
+                {{ queryLetter.recipient }}
+              </el-col>
+              <el-col :offset="1" :span="2">
+                Sender address
+              </el-col>
+              <el-col :span="5">
+                {{ queryLetter.sender }}
+              </el-col>
+              <el-col :offset="1" :span="1">
+                Deadline
+              </el-col>
+              <el-col :span="3">
+                {{ queryLetter.deadline }}
+              </el-col>
+            </el-row>
+            <br>
+            <hr>
+            <el-row>
+              <el-col :offset="9" :span="6">
                 <div style="font-size: 25px;">Payment Info</div><br>
               </el-col>
               <br>
             </el-row>
             <el-row>
-              <el-col :offset="2" :span="10" style="font-size: 25px;">
+              <el-col :offset="3" :span="10" style="font-size: 25px;">
                 {{ queryPayment.name }} ({{ queryPayment.address }})
               </el-col>
               <el-col :offset="1" :span="5" style="font-size: 25px;">
-                amount: {{ paymentShow() }}
+                amount: {{ queryPayment.showAmount }}
               </el-col>
             </el-row>
             <br>
             <hr>
             <el-row>
-              <el-col :offset="8" :span="6">
+              <el-col :offset="9" :span="6">
                 <div style="font-size: 25px;">Annexs Info</div><br>
               </el-col>
             </el-row>
@@ -173,13 +203,13 @@
               <el-col :offset="2" :span="2">
                 type: {{ item.type }}
               </el-col>
-              <el-col :span="9">
-                address: {{ item.address }}
+              <el-col :span="9" v-if="item.type == 'ERC721' || item.type == 'ERC20' || item.type == 'ERC1155'">
+                address: {{ item.token }}
               </el-col>
               <el-col :span="3" v-if="item.type == 'ERC721' || item.type == 'ERC1155'">
                 id: {{ item.id }}
               </el-col>
-              <el-col :span="4" v-if="item.type == 'ERC20' || item.type == 'ERC1155'">
+              <el-col :span="4" v-if="item.type == 'ETH' || item.type == 'ERC20' || item.type == 'ERC1155'">
                 amount: {{ item.amount }}
               </el-col>
             </el-row>
@@ -187,8 +217,8 @@
             <hr>
             <br>
             <el-row>
-              <el-col :offset="10" :span="2">
-                <el-button type="success">Claim</el-button>
+              <el-col :offset="11" :span="2">
+                <el-button type="success" @click="claim()">Claim</el-button>
               </el-col>
             </el-row>
           </el-main>
@@ -213,13 +243,17 @@
 </style>
 
 <script>
-import { ethers, Contract } from "ethers";
+import { ethers, Contract, AbiCoder } from "ethers";
 import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 import BigNumber from "bignumber.js";
 import { erc20Abi, postOfficAbi } from './assets/config'
+const coder = AbiCoder.defaultAbiCoder();
 
-const CONTRACT_ADDRESS = "0x27288E663371559F2582622D657A0Df8C21B4961"
+const CONTRACT_ADDRESS = {
+  "sepolia": "0xA345df28B272E617c0179912dB98c767a1A03406",
+
+}
 
 export default {
   name: 'App',
@@ -249,29 +283,101 @@ export default {
           id: "0"
         }
       ],
-      letterId: "0xf6821c8e8ab7f5256121b20acd69c9e87cb5ce6ce0f36596237c05fd44f97638",
+      letterId: "",
       queryPayment: {
-        address: "0xca4C532B10b8E9d48A65239C7E9eAafBF170b3Ce",
-        name: "usdt",
-        decimals: 18n,
-        amount: 1000000010000000000000n,
+        address: null,
+        name: null,
+        amount: null,
+        showAmount: null
       },
-      queryId: null,
-      queryAnnexs: [{
-        type: "1",
-        address: "0xca4C532B10b8E9d48A65239C7E9eAafBF170b3Ce",
-        amount: 1000000010000000000000n,
-        id: "0xca4C532B10b8E9d48A65239C7E9eAafBF170b3Ce1"
-      }],
-      queryAnnexsShow: [{
-        type: "ERC1155",
-        address: "0xca4C532B10b8E9d48A65239C7E9eAafBF170b3Ce",
-        amount: "2",
-        id: "1"
-      }]
+      queryId: "",
+      queryAnnexsShow: [],
+      queryLetter: {
+        deadline: null,
+        recipient: null,
+        sender: null,
+        annexAmount: null,
+        id: null
+      }
     }
   },
   methods: {
+    async claim() {
+      let provider = new ethers.BrowserProvider(window.ethereum)
+      let signer = await provider.getSigner()
+      const postOffice = new Contract(CONTRACT_ADDRESS[this.network], postOfficAbi, provider)
+      if (this.queryId == null || this.queryId == undefined || this.queryId == '') {
+        ElMessage({ message: "letterId is empty", type: 'warning', });
+        return;
+      }
+      await postOffice.connect(signer).claim(this.queryId)
+    },
+    async getLetter() {
+      let provider = new ethers.BrowserProvider(window.ethereum)
+      const postOffice = new Contract(CONTRACT_ADDRESS[this.network], postOfficAbi, provider)
+      const letter = await postOffice.letters(this.queryId);
+      if (letter[0] === ethers.ZeroAddress) {
+        ElMessage({ message: "There is no such letter", type: 'warning', });
+        return;
+      }
+
+      //base info
+      this.queryLetter.sender = letter[0];
+      this.queryLetter.recipient = letter[1];
+      this.annexAmount = letter[2]
+
+      this.queryPayment.address = letter[3][0]
+      this.queryPayment.amount = letter[3][1]
+
+      const erc20 = new Contract(this.queryPayment.address, erc20Abi, provider)
+      const decimals = await erc20.decimals();
+      this.queryPayment.showAmount = BigNumber(this.queryPayment.amount).div(BigNumber(10).pow(decimals)).decimalPlaces(6).toString()
+      const name = await erc20.symbol();
+      this.queryPayment.name = name;
+      this.queryLetter.deadline = this.getFormatDate(letter[4] * 1000n)
+
+      this.queryAnnexsShow = []
+      //annex info
+      for (let i = 0; i < this.annexAmount; i++) {
+        let index = coder.encode(["uint256"], [i])
+        index = index.substring(2, index.length)
+        const annex = await postOffice.annex(this.queryId + index)
+
+        this.queryAnnexsShow.push((await this.getQueryShow(annex, provider)));
+      }
+    },
+    async getQueryShow(annex, provider) {
+      const type = annex[0];
+      if (type == 0) {
+        const amount = BigNumber(annex[2]).div(BigNumber(10).pow(18)).decimalPlaces(6).toString()
+        return { type: "ETH", amount: amount };
+      }
+      if (type == 1) {
+        const erc20 = new Contract(annex[1], erc20Abi, provider)
+        const decimals = await erc20.decimals();
+        const amount = BigNumber(annex[2]).div(BigNumber(10).pow(decimals)).decimalPlaces(6).toString()
+        const name = await erc20.symbol();
+        return { type: "ERC20", token: annex[1], amount: amount, name: name }
+      }
+      if (type == 2) {
+        const erc20 = new Contract(annex[1], erc20Abi, provider)
+        const name = await erc20.symbol();
+        return { type: "ERC721", name: name, token: annex[1], id: annex[3] }
+      }
+      if (type == 3) {
+        return { type: "ERC1155", token: annex[1], amount: annex[2], id: annex[3] }
+      };
+    },
+    getFormatDate(cellValue) {
+      const date = new Date(parseInt(cellValue));
+      const Y = date.getFullYear() + '-';
+      const M = (date.getMonth() + 1 < 10 ? '0' + (date.getMonth() + 1) : date.getMonth() + 1) + '-';
+      const D = date.getDate() + ' ';
+      const h = date.getHours() + ':';
+      const m = date.getMinutes() + ':';
+      const s = date.getSeconds();
+      return Y + M + D + h + m + s;
+    },
     paymentShow() {
       return BigNumber(this.queryPayment.amount).div(BigNumber(10).pow(this.queryPayment.decimals)).decimalPlaces(6)
     },
@@ -292,7 +398,6 @@ export default {
         }
         if (element.type == 1) {
           const erc20 = new Contract(element.address, erc20Abi, provider)
-          console.log(erc20);
           const decimals = await erc20.decimals();
           amount = BigNumber(amount).multipliedBy(10n ** decimals).toFixed(0);
           id = 0;
@@ -307,18 +412,21 @@ export default {
       const payTokenDecimals = await payToken.decimals();
       const paymentInfo = [this.payInfo.token, BigNumber(this.payInfo.amount).multipliedBy(10n ** payTokenDecimals).toFixed(0)]
 
-      const postOffice = new Contract(CONTRACT_ADDRESS, postOfficAbi, provider)
-
-      console.log(annexsData);
+      const postOffice = new Contract(CONTRACT_ADDRESS[this.network], postOfficAbi, provider)
 
       this.sending = true;
 
       let signer = await provider.getSigner()
-      const tx = await postOffice.connect(signer).sendLetter(annexsData, paymentInfo, this.receiver, this.deadline, { value: e });
-      const returnData = await tx.wait()
-      const id = returnData.logs[returnData.logs.length - 1].args[0]
-      this.sending = false;
-      this.letterId = id;
+      try {
+        const tx = await postOffice.connect(signer).sendLetter(annexsData, paymentInfo, this.receiver, this.deadline, { value: e });
+        const returnData = await tx.wait()
+        const id = returnData.logs[returnData.logs.length - 1].args[0]
+        this.sending = false;
+        this.letterId = id;
+      } catch (error) {
+        ElMessage({ message: error.message, type: 'error', duration: 10000 });
+        this.sending = false;
+      }
     },
     async connectWallet() {
       if (window.ethereum == null) {
@@ -332,10 +440,7 @@ export default {
 
         } catch (error) {
           if (error.info.error.code === 4001) {
-            ElMessage({
-              message: "User rejected the request",
-              type: 'warning',
-            })
+            ElMessage({ message: "User rejected the request", type: 'warning' });
           }
         }
       }
