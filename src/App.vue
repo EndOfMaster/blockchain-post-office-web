@@ -21,8 +21,7 @@
     <el-divider>
       <el-icon><star-filled /></el-icon>
     </el-divider>
-    
-    <el-tabs v-model="activeName" class="demo-tabs" @tab-click="handleClick" stretch=true>
+    <el-tabs v-model="activeName" class="demo-tabs" @tab-click="handleClick" type="border-card" stretch=true>
       <el-tab-pane label="PostOffice" name="first">
         <PostOffice />
       </el-tab-pane>
@@ -63,7 +62,7 @@ export default {
   },
   data() {
     return {
-      activeName: ref('first'),
+      activeName: ref('second'),
       network: null,
       chainId: null,
       address: null

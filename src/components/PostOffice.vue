@@ -1,7 +1,6 @@
 <template>
   <div style="width: 1600px;">
     <br>
-    <hr>
     <br>
     <el-tabs v-model="activeName" class="demo-tabs" stretch=true>
       <el-tab-pane label="Send" name="first">
@@ -27,7 +26,7 @@
               </el-col>
               <el-col :span="4">
                 <div style=" padding-top: 6px;">
-                  <el-input v-model="deadline" placeholder="deadline" />
+                  <el-input v-model="deadline" placeholder="timestamp" />
                 </div>
               </el-col>
             </el-row>
@@ -239,18 +238,11 @@ const CONTRACT_ADDRESS = {
 
 export default {
   name: 'PostOffice',
-  created() {
-    ethereum.on('accountsChanged', this.accountsChanged);
-    ethereum.on('chainChanged', this.chainChanged);
-    ethereum.on('disconnect', this.disconnect);
-  },
   data() {
     return {
       activeName: ref('first'),
       sending: false,
       contract: null,
-      network: null,
-      chainId: null,
       address: null,
       receiver: null,
       deadline: null,
@@ -288,7 +280,9 @@ export default {
     async claim() {
       let provider = new ethers.BrowserProvider(window.ethereum)
       let signer = await provider.getSigner()
-      const postOffice = new Contract(CONTRACT_ADDRESS[this.chainId], postOfficAbi, provider)
+      const network = await provider.getNetwork()
+      const chainId = network.chainId;
+      const postOffice = new Contract(CONTRACT_ADDRESS[chainId], postOfficAbi, provider)
       if (this.queryId == null || this.queryId == undefined || this.queryId == '') {
         ElMessage({ message: "letterId is empty", type: 'warning', });
         return;
@@ -297,7 +291,9 @@ export default {
     },
     async getLetter() {
       let provider = new ethers.BrowserProvider(window.ethereum)
-      const postOffice = new Contract(CONTRACT_ADDRESS[this.chainId], postOfficAbi, provider)
+      const network = await provider.getNetwork()
+      const chainId = network.chainId;
+      const postOffice = new Contract(CONTRACT_ADDRESS[chainId], postOfficAbi, provider)
       const letter = await postOffice.letters(this.queryId);
       if (letter[0] === ethers.ZeroAddress) {
         ElMessage({ message: "There is no such letter", type: 'warning', });
@@ -368,6 +364,8 @@ export default {
       const annexsData = []
       let e = BigNumber(0);
       let provider = new ethers.BrowserProvider(window.ethereum)
+      const network = await provider.getNetwork()
+      const chainId = network.chainId;
       for (let i = 0; i < this.annexs.length; i++) {
         const element = this.annexs[i];
         let amount = element.amount
@@ -395,7 +393,7 @@ export default {
       const payTokenDecimals = await payToken.decimals();
       const paymentInfo = [this.payInfo.token, BigNumber(this.payInfo.amount).multipliedBy(10n ** payTokenDecimals).toFixed(0)]
 
-      const postOffice = new Contract(CONTRACT_ADDRESS[this.chainId], postOfficAbi, provider)
+      const postOffice = new Contract(CONTRACT_ADDRESS[chainId], postOfficAbi, provider)
 
       this.sending = true;
 
@@ -410,47 +408,6 @@ export default {
         ElMessage({ message: error.message, type: 'error', duration: 10000 });
         this.sending = false;
       }
-    },
-    async connectWallet() {
-      if (window.ethereum == null) {
-        ElMessage.error('Please install metamask')
-      } else {
-        try {
-          let provider = new ethers.BrowserProvider(window.ethereum)
-          let signer = await provider.getSigner();
-          this.address = signer.address.substring(0, 8) + "..."
-          const network = await provider.getNetwork()
-          this.chainId = network.chainId;
-          this.network = network.name
-          if (this.chainId == 168587773n) this.network = "blast sepolia"
-
-        } catch (error) {
-          if (error.info.error.code === 4001) {
-            ElMessage({ message: "User rejected the request", type: 'warning' });
-          }
-        }
-      }
-    },
-    async accountsChanged(accounts) {
-      console.log(accounts);
-      if (accounts.length > 0) {
-        let provider = new ethers.BrowserProvider(window.ethereum)
-        let signer = await provider.getSigner();
-        this.address = signer.address.substring(0, 8) + "..."
-      } else {
-        this.network = null;
-        this.address = null
-      }
-    },
-    async chainChanged(networkId) {
-      console.log(networkId);
-      let provider = new ethers.BrowserProvider(window.ethereum)
-      this.network = (await provider.getNetwork()).name
-
-    },
-    disconnect() {
-      this.network = null;
-      this.address = null
     },
     deleteAnnex(index) {
       if (this.annexs.length <= 1) {
@@ -468,26 +425,6 @@ export default {
         }
       )
     },
-  }
-}
-
-const connectWallet = async () => {
-  //child.value.testLog();
-  if (window.ethereum == null) {
-    ElMessage.error('Please install metamask')
-  } else {
-    try {
-      provider = new ethers.BrowserProvider(window.ethereum)
-      signer = await provider.getSigner();
-      network = (await provider.getNetwork()).name
-    } catch (error) {
-      if (error.info.error.code === 4001) {
-        ElMessage({
-          message: "User rejected the request",
-          type: 'warning',
-        })
-      }
-    }
   }
 }
 
