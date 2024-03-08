@@ -237,12 +237,12 @@ import { ethers, Contract, AbiCoder } from "ethers";
 import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 import BigNumber from "bignumber.js";
-import { erc20Abi, postOfficAbi } from '../assets/config'
+import { erc20Abi, vaultAbi } from '../assets/config'
 const coder = AbiCoder.defaultAbiCoder();
 
 const CONTRACT_ADDRESS = {
-  "11155111": "0xA345df28B272E617c0179912dB98c767a1A03406",
-  "168587773": "0xabba4D35cCb5da1A0daaaF171C0480A25d802eD7"
+  "11155111": "0x42988C0924e33d087Da4B69dEbe094cd1e001F66",
+  // "168587773": "0xabba4D35cCb5da1A0daaaF171C0480A25d802eD7"
 }
 
 export default {
@@ -288,19 +288,20 @@ export default {
       let signer = await provider.getSigner()
       const network = await provider.getNetwork()
       const chainId = network.chainId;
-      const postOffice = new Contract(CONTRACT_ADDRESS[chainId], postOfficAbi, provider)
+      const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
       if (this.queryId == null || this.queryId == undefined || this.queryId == '') {
         ElMessage({ message: "letterId is empty", type: 'warning', });
         return;
       }
-      await postOffice.connect(signer).claim(this.queryId)
+      await vault.connect(signer).claim(this.queryId)
     },
     async getLetter() {
+      let provider = new ethers.BrowserProvider(window.ethereum)
       const network = await provider.getNetwork()
       const chainId = network.chainId;
-      let provider = new ethers.BrowserProvider(window.ethereum)
-      const postOffice = new Contract(CONTRACT_ADDRESS[chainId], postOfficAbi, provider)
-      const letter = await postOffice.letters(this.queryId);
+      const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
+      //TODO 
+      const letter = await vault.letters(this.queryId);
       if (letter[0] === ethers.ZeroAddress) {
         ElMessage({ message: "There is no such letter", type: 'warning', });
         return;
@@ -326,7 +327,7 @@ export default {
       for (let i = 0; i < this.annexAmount; i++) {
         let index = coder.encode(["uint256"], [i])
         index = index.substring(2, index.length)
-        const annex = await postOffice.annex(this.queryId + index)
+        const annex = await vault.annex(this.queryId + index)
 
         this.queryAnnexsShow.push((await this.getQueryShow(annex, provider)));
       }
@@ -401,10 +402,17 @@ export default {
       const userAddress = await signer.getAddress();
       const password = ethers.keccak256(ethers.toUtf8Bytes(userAddress + this.password));
 
+      console.log(annexsData);
+      console.log(this.message);
+      console.log(this.secretWords);
+      console.log(password);
+      console.log(this.receiver);
+      console.log(this.deadline);
+
       this.sending = true;
       try {
-        const postOffice = new Contract(CONTRACT_ADDRESS[chainId], postOfficAbi, provider)
-        const tx = await postOffice.connect(signer).sendLetter(annexsData, this.message, this.secretWords, password, this.receiver, this.deadline, { value: e });
+        const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
+        const tx = await vault.connect(signer).sendLetter(annexsData, this.message, this.secretWords, password, this.receiver, this.deadline, { value: e });
         const returnData = await tx.wait()
         const id = returnData.logs[returnData.logs.length - 1].args[0]
         this.sending = false;
@@ -413,6 +421,16 @@ export default {
         ElMessage({ message: error.message, type: 'error', duration: 10000 });
         this.sending = false;
       }
+    },
+    addAnnex() {
+      this.annexs.push(
+        {
+          type: "",
+          address: "",
+          amount: "",
+          id: ""
+        }
+      )
     },
   }
 }
