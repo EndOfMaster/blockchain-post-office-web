@@ -120,7 +120,7 @@
                 <el-button type="success" @click="sendLetter()" v-if="!sending">Send</el-button>
                 <br>
                 <br>
-                <el-progress :percentage="70" :indeterminate="true" width="300" v-if="sending" />
+                <el-progress :percentage="70" :indeterminate="true" width="300" v-if="claiming" />
               </el-col>
             </el-row>
             <div style="font-size: 20px;">letterId: {{ letterId }}</div>
@@ -132,9 +132,16 @@
         <el-container>
           <el-main>
             <el-row>
-              <el-col :offset="8" :span="6">
-                <el-input v-model="queryId" placeholder="letter id" style="width: 300px;" />&nbsp;
+              <el-col :offset="7" :span="8">
+                LetterId:&nbsp; <el-input v-model="queryId" placeholder="letter id" style="width: 300px;" />&nbsp;
                 <el-button type="primary" @click="getLetter()">Query</el-button>
+              </el-col>
+            </el-row>
+            <br>
+            <el-row>
+              <el-col :offset="7" :span="8">
+                Password:&nbsp; <el-input v-model="queryPassword" placeholder="password" style="width: 300px;" />&nbsp;
+                <el-button type="primary" @click="getLetterByPassword()">Query</el-button>
               </el-col>
             </el-row>
             <br>
@@ -168,17 +175,21 @@
             <br>
             <hr>
             <el-row>
-              <el-col :offset="9" :span="6">
-                <div style="font-size: 25px;">Payment Info</div><br>
+              <el-col :offset="4" :span="3" style="font-size: 25px;">
+                public content
               </el-col>
-              <br>
-            </el-row>
-            <el-row>
-              <el-col :offset="3" :span="10" style="font-size: 25px;">
-                {{ queryPayment.name }} ({{ queryPayment.address }})
+              <el-col :span="4">
+                <div style=" padding-top: 6px;">
+                  {{ queryLetter.message }}
+                </div>
               </el-col>
-              <el-col :offset="1" :span="5" style="font-size: 25px;">
-                amount: {{ queryPayment.showAmount }}
+              <el-col :offset="1" :span="2" style="font-size: 25px;">
+                secretWords
+              </el-col>
+              <el-col :span="4">
+                <div style=" padding-top: 6px;">
+                  {{ queryLetter.secretWords }}
+                </div>
               </el-col>
             </el-row>
             <br>
@@ -209,6 +220,8 @@
             <el-row>
               <el-col :offset="11" :span="2">
                 <el-button type="success" @click="claim()">Claim</el-button>
+                <br>
+                <el-progress :percentage="70" :indeterminate="true" width="300" v-if="claiming" />
               </el-col>
             </el-row>
           </el-main>
@@ -233,15 +246,14 @@
 </style>
 
 <script>
-import { ethers, Contract, AbiCoder } from "ethers";
+import { ethers, Contract } from "ethers";
 import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
 import BigNumber from "bignumber.js";
 import { erc20Abi, vaultAbi } from '../assets/config'
-const coder = AbiCoder.defaultAbiCoder();
 
 const CONTRACT_ADDRESS = {
-  "11155111": "0x42988C0924e33d087Da4B69dEbe094cd1e001F66",
+  "11155111": "0x9e121b995cd1D8Cc2e0E58735F1143047Ce76aFE",
   // "168587773": "0xabba4D35cCb5da1A0daaaF171C0480A25d802eD7"
 }
 
@@ -252,6 +264,7 @@ export default {
       activeName: ref('first'),
       password: null,
       sending: false,
+      claiming: false,
       contract: null,
       address: null,
       receiver: null,
@@ -264,44 +277,44 @@ export default {
         amount: "",
         id: "0"
       }],
-      letterId: "",
-      queryPayment: {
-        address: null,
-        name: null,
-        amount: null,
-        showAmount: null
-      },
-      queryId: "",
+      letterId: null,
+      queryId: null,
+      queryPassword: '',
       queryAnnexsShow: [],
       queryLetter: {
         deadline: null,
         recipient: null,
         sender: null,
         annexAmount: null,
-        id: null
-      }
+        message: null,
+        annexAmount: 0,
+        secretWords: null
+      },
     }
   },
   methods: {
     async claim() {
-      let provider = new ethers.BrowserProvider(window.ethereum)
-      let signer = await provider.getSigner()
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
       const network = await provider.getNetwork()
       const chainId = network.chainId;
       const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
-      if (this.queryId == null || this.queryId == undefined || this.queryId == '') {
-        ElMessage({ message: "letterId is empty", type: 'warning', });
+      if (this.queryLetter.recipient == null || this.queryLetter.recipient == undefined || this.queryLetter.recipient == '') {
+        ElMessage({ message: "password is empty", type: 'warning', });
         return;
       }
-      await vault.connect(signer).claim(this.queryId)
+
+      this.claiming = true;
+      await vault.connect(signer).claim(this.queryPassword)
+      this.claiming = false;
     },
     async getLetter() {
-      let provider = new ethers.BrowserProvider(window.ethereum)
+      this.clearAll();
+      const provider = new ethers.BrowserProvider(window.ethereum)
       const network = await provider.getNetwork()
       const chainId = network.chainId;
       const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
-      //TODO 
-      const letter = await vault.letters(this.queryId);
+      const letter = await vault.letterPublicParams(this.queryId);
       if (letter[0] === ethers.ZeroAddress) {
         ElMessage({ message: "There is no such letter", type: 'warning', });
         return;
@@ -310,26 +323,33 @@ export default {
       //base info
       this.queryLetter.sender = letter[0];
       this.queryLetter.recipient = letter[1];
-      this.annexAmount = letter[2]
+      this.queryLetter.message = letter[2];
+      this.queryLetter.deadline = this.getFormatDate(letter[3] * 1000n);
+    },
+    async getLetterByPassword() {
+      this.clearAll();
+      const provider = new ethers.BrowserProvider(window.ethereum)
+      const signer = await provider.getSigner()
+      const network = await provider.getNetwork()
+      const chainId = network.chainId;
+      const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
 
-      this.queryPayment.address = letter[3][0]
-      this.queryPayment.amount = letter[3][1]
+      const [letter, annexes] = await vault.connect(signer).letterAllParams(this.queryPassword);
 
-      const erc20 = new Contract(this.queryPayment.address, erc20Abi, provider)
-      const decimals = await erc20.decimals();
-      this.queryPayment.showAmount = BigNumber(this.queryPayment.amount).div(BigNumber(10).pow(decimals)).decimalPlaces(6).toString()
-      const name = await erc20.symbol();
-      this.queryPayment.name = name;
-      this.queryLetter.deadline = this.getFormatDate(letter[4] * 1000n)
+      if (letter[0] === ethers.ZeroAddress) {
+        ElMessage({ message: "There is no such letter", type: 'warning', });
+        return;
+      }
 
-      this.queryAnnexsShow = []
-      //annex info
-      for (let i = 0; i < this.annexAmount; i++) {
-        let index = coder.encode(["uint256"], [i])
-        index = index.substring(2, index.length)
-        const annex = await vault.annex(this.queryId + index)
+      //base info
+      this.queryLetter.sender = letter[0];
+      this.queryLetter.recipient = letter[1];
+      this.queryLetter.deadline = this.getFormatDate(letter[3] * 1000n);
+      this.queryLetter.message = letter[4];
+      this.queryLetter.secretWords = letter[5];
 
-        this.queryAnnexsShow.push((await this.getQueryShow(annex, provider)));
+      for (let i = 0; i < annexes.length; i++) {
+        this.queryAnnexsShow.push((await this.getQueryShow(annexes[i], provider)));
       }
     },
     async getQueryShow(annex, provider) {
@@ -364,9 +384,6 @@ export default {
       const s = date.getSeconds();
       return Y + M + D + h + m + s;
     },
-    paymentShow() {
-      return BigNumber(this.queryPayment.amount).div(BigNumber(10).pow(this.queryPayment.decimals)).decimalPlaces(6)
-    },
     async sendLetter() {
       const annexsData = []
       let e = BigNumber(0);
@@ -397,17 +414,9 @@ export default {
       }
       e = BigInt(e.toFixed(0));
 
-      let signer = await provider.getSigner()
-
+      const signer = await provider.getSigner()
       const userAddress = await signer.getAddress();
-      const password = ethers.keccak256(ethers.toUtf8Bytes(userAddress + this.password));
-
-      console.log(annexsData);
-      console.log(this.message);
-      console.log(this.secretWords);
-      console.log(password);
-      console.log(this.receiver);
-      console.log(this.deadline);
+      const password = ethers.solidityPackedKeccak256(["address", "string"], [userAddress, this.password]);
 
       this.sending = true;
       try {
@@ -421,18 +430,46 @@ export default {
         ElMessage({ message: error.message, type: 'error', duration: 10000 });
         this.sending = false;
       }
+
     },
-    addAnnex() {
-      this.annexs.push(
-        {
-          type: "",
-          address: "",
-          amount: "",
-          id: ""
-        }
-      )
-    },
-  }
+    clearAll() {
+      this.password = null;
+      this.sending = false;
+      this.contract = null;
+      this.address = null;
+      this.receiver = null;
+      this.deadline = null;
+      this.message = null;
+      this.secretWords = null;
+      this.annexs = [{
+        type: "",
+        address: "",
+        amount: "",
+        id: "0"
+      }];
+      this.letterId = null;
+      this.queryAnnexsShow = [];
+      this.queryLetter = {
+        deadline: null,
+        recipient: null,
+        sender: null,
+        annexAmount: null,
+        message: null,
+        annexAmount: 0,
+        secretWords: null
+      };
+    }
+  },
+  addAnnex() {
+    this.annexs.push(
+      {
+        type: "",
+        address: "",
+        amount: "",
+        id: ""
+      }
+    )
+  },
 }
 
 </script>

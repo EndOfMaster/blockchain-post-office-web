@@ -62,7 +62,7 @@ export default {
   },
   data() {
     return {
-      activeName: ref('second'),
+      activeName: ref('first'),
       network: null,
       chainId: null,
       address: null
