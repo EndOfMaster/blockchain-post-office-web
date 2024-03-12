@@ -13,15 +13,7 @@
             </el-row>
             <br>
             <el-row>
-              <el-col :offset="0" :span="3" style="font-size: 25px;">
-                recipient address
-              </el-col>
-              <el-col :span="4">
-                <div style=" padding-top: 6px;">
-                  <el-input v-model="receiver" placeholder="receiver address" />
-                </div>
-              </el-col>
-              <el-col :offset="1" :span="2" style="font-size: 25px;">
+              <el-col :offset="5" :span="2" style="font-size: 25px;">
                 deadline
               </el-col>
               <el-col :span="4">
@@ -153,13 +145,7 @@
             </el-row>
             <br>
             <el-row style="font-size: 15px;">
-              <el-col :offset="2" :span="2">
-                Recipient address
-              </el-col>
-              <el-col :span="5">
-                {{ queryLetter.recipient }}
-              </el-col>
-              <el-col :offset="1" :span="2">
+              <el-col :offset="5" :span="2">
                 Sender address
               </el-col>
               <el-col :span="5">
@@ -219,7 +205,7 @@
             <br>
             <el-row>
               <el-col :offset="11" :span="2">
-                <el-button type="success" @click="claim()">Claim</el-button>
+                <el-button type="success" @click="claim()" v-if="!claiming">Claim</el-button>
                 <br>
                 <el-progress :percentage="70" :indeterminate="true" width="300" v-if="claiming" />
               </el-col>
@@ -253,7 +239,7 @@ import BigNumber from "bignumber.js";
 import { erc20Abi, vaultAbi } from '../assets/config'
 
 const CONTRACT_ADDRESS = {
-  "11155111": "0x9e121b995cd1D8Cc2e0E58735F1143047Ce76aFE",
+  "11155111": "0x0C773d47e82dF9D867e8019bDBe944cD2E554e79",
   // "168587773": "0xabba4D35cCb5da1A0daaaF171C0480A25d802eD7"
 }
 
@@ -267,7 +253,6 @@ export default {
       claiming: false,
       contract: null,
       address: null,
-      receiver: null,
       deadline: null,
       message: null,
       secretWords: null,
@@ -283,7 +268,6 @@ export default {
       queryAnnexsShow: [],
       queryLetter: {
         deadline: null,
-        recipient: null,
         sender: null,
         annexAmount: null,
         message: null,
@@ -298,15 +282,21 @@ export default {
       const signer = await provider.getSigner()
       const network = await provider.getNetwork()
       const chainId = network.chainId;
-      const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
-      if (this.queryLetter.recipient == null || this.queryLetter.recipient == undefined || this.queryLetter.recipient == '') {
+      if (this.queryPassword == null || this.queryPassword == undefined || this.queryPassword == '') {
         ElMessage({ message: "password is empty", type: 'warning', });
         return;
       }
 
       this.claiming = true;
-      await vault.connect(signer).claim(this.queryPassword)
-      this.claiming = false;
+      try {
+        const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
+        const tx = await vault.connect(signer).claim(this.queryPassword)
+        await tx.wait()
+        this.claiming = false;
+      } catch (error) {
+        ElMessage({ message: error.message, type: 'error', duration: 10000 });
+        this.claiming = false;
+      }
     },
     async getLetter() {
       this.clearAll();
@@ -322,9 +312,8 @@ export default {
 
       //base info
       this.queryLetter.sender = letter[0];
-      this.queryLetter.recipient = letter[1];
-      this.queryLetter.message = letter[2];
-      this.queryLetter.deadline = this.getFormatDate(letter[3] * 1000n);
+      this.queryLetter.message = letter[1];
+      this.queryLetter.deadline = this.getFormatDate(letter[2] * 1000n);
     },
     async getLetterByPassword() {
       this.clearAll();
@@ -343,10 +332,9 @@ export default {
 
       //base info
       this.queryLetter.sender = letter[0];
-      this.queryLetter.recipient = letter[1];
-      this.queryLetter.deadline = this.getFormatDate(letter[3] * 1000n);
-      this.queryLetter.message = letter[4];
-      this.queryLetter.secretWords = letter[5];
+      this.queryLetter.deadline = this.getFormatDate(letter[2] * 1000n);
+      this.queryLetter.message = letter[3];
+      this.queryLetter.secretWords = letter[4];
 
       for (let i = 0; i < annexes.length; i++) {
         this.queryAnnexsShow.push((await this.getQueryShow(annexes[i], provider)));
@@ -421,7 +409,7 @@ export default {
       this.sending = true;
       try {
         const vault = new Contract(CONTRACT_ADDRESS[chainId], vaultAbi, provider)
-        const tx = await vault.connect(signer).sendLetter(annexsData, this.message, this.secretWords, password, this.receiver, this.deadline, { value: e });
+        const tx = await vault.connect(signer).sendLetter(annexsData, this.message, this.secretWords, password, this.deadline, { value: e });
         const returnData = await tx.wait()
         const id = returnData.logs[returnData.logs.length - 1].args[0]
         this.sending = false;
@@ -433,11 +421,9 @@ export default {
 
     },
     clearAll() {
-      this.password = null;
       this.sending = false;
       this.contract = null;
       this.address = null;
-      this.receiver = null;
       this.deadline = null;
       this.message = null;
       this.secretWords = null;
@@ -451,7 +437,6 @@ export default {
       this.queryAnnexsShow = [];
       this.queryLetter = {
         deadline: null,
-        recipient: null,
         sender: null,
         annexAmount: null,
         message: null,

@@ -2,7 +2,7 @@
   <div style="width: 1600px;">
     <el-container>
       <el-header>
-        <el-alert title="Only supports sepolia and blast sepolia" type="info" center show-icon />
+        <el-alert title="Only supports sepolia" type="info" center show-icon />
         <el-row>
           <el-col :offset="9" :span="6" style="font-size: 30px;">
             Blockchain Post Office
